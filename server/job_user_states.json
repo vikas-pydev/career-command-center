@@ -71,5 +71,20 @@
   "JOB-2026-012": {
     "status": "applied",
     "appliedAt": "2026-10-22T19:11:08+05:30"
+  },
+  "JOB-2026-023": {
+    "status": "deleted",
+    "company": "Sarvam AI",
+    "deletedAt": "2026-10-22T20:00:27+05:30"
+  },
+  "JOB-2026-024": {
+    "status": "deleted",
+    "company": "Fractal Analytics",
+    "deletedAt": "2026-10-22T20:43:28+05:30"
+  },
+  "JOB-2026-022": {
+    "status": "applied",
+    "company": "GE Vernova",
+    "appliedAt": "2026-10-22T20:45:31+05:30"
   }
 }
