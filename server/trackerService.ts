@@ -24,6 +24,7 @@ import { telemetryStore } from './telemetryStore';
 
 export interface UserJobState {
   status: 'active' | 'applied' | 'deleted';
+  company?: string;
   appliedAt?: string;
   deletedAt?: string;
   userNotes?: string;
@@ -61,6 +62,8 @@ const PDF_RESUME_MAP: Record<string, string> = {
   'kla': 'https://drive.google.com/file/d/16neCuByWGxrcxwF3D3_ZTzbhcknTe5r5/view?usp=sharing',
   'techolution': 'https://drive.google.com/file/d/1Cyp3J9GpX5UkR10DtEfxyc69lBbH-M9N/view?usp=sharing',
   'hcl': 'https://drive.google.com/file/d/1Asli8HELB6GSl_-9XES9aT-nzZoCuapQ/view?usp=sharing',
+  'sarvam': 'https://drive.google.com/file/d/1AYHdl7PBpkWt13GPbgD2us-cfCONIdy5/view?usp=sharing',
+  'fractal': 'https://drive.google.com/file/d/1kjOTIbcYkTCbDi5-Ztk28e8oCXV8VYCo/view?usp=sharing',
   'default': 'https://drive.google.com/file/d/1n009_DEQB9yPPNPcZmxmccUJHO3Kpk9I/view?usp=sharing',
 };
 
@@ -109,6 +112,7 @@ export class TrackerService {
     profile: CandidateProfile;
     tailoredResumes: TailoredResumeV2[];
     runHistory: RunHistoryRecord[];
+    dailySummary: DailySummaryRecord[];
   } | null = null;
 
   constructor(filePath?: string) {
@@ -195,6 +199,17 @@ export class TrackerService {
     // 1. Job Pipeline (Tab 2)
     const pipelineSheet = wb.Sheets['Job Pipeline'];
     const rawJobs = XLSX.utils.sheet_to_json<any>(pipelineSheet);
+
+    const seenJobIds = new Set<string>();
+    let maxJobNum = 0;
+    for (const r of rawJobs) {
+      const m = String(r['Job ID'] || '').match(/JOB-\d+-(\d+)/);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (num > maxJobNum) maxJobNum = num;
+      }
+    }
+
     const jobs: JobRecord[] = rawJobs.map((r) => {
       let contactEmail = String(r['Contact email, if verified'] || '').trim();
       const company = String(r['Company'] || '');
@@ -210,16 +225,29 @@ export class TrackerService {
       } else if (company.toLowerCase().includes('qualcomm')) {
         contactEmail = 'ashishs@qti.qualcomm.com';
       }
-      const jobId = String(r['Job ID'] || '');
+
+      const rawJobId = String(r['Job ID'] || '').trim();
+      let jobId = rawJobId;
+      if (seenJobIds.has(jobId) || !jobId) {
+        maxJobNum++;
+        const year = rawJobId.split('-')[1] || '2026';
+        jobId = `JOB-${year}-${String(maxJobNum).padStart(3, '0')}`;
+      }
+      seenJobIds.add(jobId);
+
       const userState = userStates[jobId];
+      // Only apply user state if company matches (preventing cross-company state contamination)
+      const stateMatchesCompany = !userState?.company || userState.company.toLowerCase() === company.toLowerCase();
+      const effectiveUserState = stateMatchesCompany ? userState : undefined;
+
       const rawAppStatus = String(r['Application status'] || '');
       const userStatus: 'active' | 'applied' | 'deleted' =
-        userState?.status || (rawAppStatus.toLowerCase() === 'applied' ? 'applied' : 'active');
+        effectiveUserState?.status || (rawAppStatus.toLowerCase() === 'applied' ? 'applied' : 'active');
       const tailoredLink = String(r['Tailored resume filename or link'] || '');
       const resumePdfUrl = resolveResumeUrl(company, tailoredLink);
       const gmailDraftUrl = resolveDraftUrl(company, String(r['Gmail draft reference, if available'] || ''));
-      const appliedAt = userState?.appliedAt || (r['Date applied'] ? String(r['Date applied']) : undefined);
-      const deletedAt = userState?.deletedAt;
+      const appliedAt = effectiveUserState?.appliedAt || (r['Date applied'] && String(r['Date applied']) !== '-' ? String(r['Date applied']) : undefined);
+      const deletedAt = effectiveUserState?.deletedAt;
 
       return {
         jobId,
@@ -395,6 +423,8 @@ export class TrackerService {
       { target: 'KLA Corporation — Software Quality Engineer AI/ML', score: '92/100', url: 'https://drive.google.com/file/d/16neCuByWGxrcxwF3D3_ZTzbhcknTe5r5/view?usp=sharing' },
       { target: 'Techolution — Generative AI Intern', score: '91/100', url: 'https://drive.google.com/file/d/1Cyp3J9GpX5UkR10DtEfxyc69lBbH-M9N/view?usp=sharing' },
       { target: 'HCLTech — Junior Data & AI Engineer', score: '90/100', url: 'https://drive.google.com/file/d/1Asli8HELB6GSl_-9XES9aT-nzZoCuapQ/view?usp=sharing' },
+      { target: 'Sarvam AI — Machine Learning Engineer Intern', score: '96/100', url: 'https://drive.google.com/file/d/1AYHdl7PBpkWt13GPbgD2us-cfCONIdy5/view?usp=sharing' },
+      { target: 'Fractal Analytics — GenAI-Engineer', score: '95/100', url: 'https://drive.google.com/file/d/1kjOTIbcYkTCbDi5-Ztk28e8oCXV8VYCo/view?usp=sharing' },
     ];
 
     const pendingQuestions = [
@@ -461,6 +491,31 @@ export class TrackerService {
           drivePdfUrl: String(r[6] || r[4] || 'https://drive.google.com/file/d/1n009_DEQB9yPPNPcZmxmccUJHO3Kpk9I/view?usp=sharing'),
         });
       }
+    }
+
+    // Sarvam AI and Fractal Analytics Tailored Resumes
+    if (!tailoredResumes.some((tr) => tr.targetCompanyRole.toLowerCase().includes('sarvam'))) {
+      tailoredResumes.push({
+        targetCompanyRole: 'Sarvam AI — Machine Learning Engineer Intern (Bengaluru)',
+        matchScore: '96/100',
+        professionalSummary: 'Machine Learning & GenAI Intern tailored for Sarvam AI foundational models and deployment.',
+        coreCompetencies: 'PyTorch, Transformers, Model Deployment, ONNX Runtime, Python, MLOps',
+        selectedProjects: 'Enterprise Support AI RAG Agent (100% Recall, ONNX Runtime <150MB) + Zepto Platform',
+        tailoringNotes: 'Focused on Sarvam AI Indic LLM deployment and efficient fine-tuning.',
+        drivePdfUrl: 'https://drive.google.com/file/d/1AYHdl7PBpkWt13GPbgD2us-cfCONIdy5/view?usp=sharing',
+      });
+    }
+
+    if (!tailoredResumes.some((tr) => tr.targetCompanyRole.toLowerCase().includes('fractal'))) {
+      tailoredResumes.push({
+        targetCompanyRole: 'Fractal Analytics — GenAI-Engineer (Req: SR-37522, Bengaluru)',
+        matchScore: '95/100',
+        professionalSummary: 'GenAI Engineer tailored for Fractal Analytics enterprise AI solutions.',
+        coreCompetencies: 'LangGraph, Hybrid RAG, Python, FastAPI, Docker, Prompt Engineering',
+        selectedProjects: 'Enterprise Support AI RAG Agent + Zepto Capstone (81.46% accuracy, 76 pytest tests)',
+        tailoringNotes: 'Focused on Fractal client-facing GenAI pipelines and agentic workflows.',
+        drivePdfUrl: 'https://drive.google.com/file/d/1kjOTIbcYkTCbDi5-Ztk28e8oCXV8VYCo/view?usp=sharing',
+      });
     }
 
     // Outreach email templates mapping (strictly Zero-Bounce compliant)
@@ -571,6 +626,25 @@ export class TrackerService {
       }
     }
 
+    // 7. Daily Discovery Summary (Tab 4)
+    const dailySheet = wb.Sheets['Daily Summary'];
+    const dailySummary: DailySummaryRecord[] = [];
+    if (dailySheet) {
+      const dailyRows = XLSX.utils.sheet_to_json<any[]>(dailySheet, { header: 1 });
+      for (let i = 1; i < dailyRows.length; i++) {
+        const r = dailyRows[i];
+        if (r && (r[0] || r[1])) {
+          dailySummary.push({
+            runDate: String(r[0] || ''),
+            jobsDiscovered: String(r[1] || ''),
+            jobsVerified: String(r[2] || ''),
+            duplicatesExcluded: String(r[3] || '0'),
+            eligibleJobs: String(r[4] || ''),
+          });
+        }
+      }
+    }
+
     return {
       jobs,
       outreach,
@@ -578,6 +652,7 @@ export class TrackerService {
       profile,
       tailoredResumes,
       runHistory,
+      dailySummary,
     };
   }
 
@@ -716,6 +791,7 @@ export class TrackerService {
 
     const stateEntry: UserJobState = {
       status,
+      company: job.company,
       appliedAt: status === 'applied' ? (userStates[jobId]?.appliedAt || nowIso) : undefined,
       deletedAt: status === 'deleted' ? nowIso : undefined,
       userNotes: notes || userStates[jobId]?.userNotes,
@@ -824,6 +900,11 @@ export class TrackerService {
   public getRunHistory(): RunHistoryRecord[] {
     this.ensureData();
     return this.cachedData!.runHistory;
+  }
+
+  public getDailySummary(): DailySummaryRecord[] {
+    this.ensureData();
+    return this.cachedData!.dailySummary || [];
   }
 
   public getIntegrationStatus(): IntegrationStatus {

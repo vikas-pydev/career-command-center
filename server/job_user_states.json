@@ -36,14 +36,6 @@
     "status": "deleted",
     "deletedAt": "2026-10-21T19:52:30+05:30"
   },
-  "JOB-2026-021": {
-    "status": "deleted",
-    "deletedAt": "2026-10-21T20:01:00+05:30"
-  },
-  "JOB-2026-022": {
-    "status": "applied",
-    "appliedAt": "2026-10-21T20:13:37+05:30"
-  },
   "JOB-2026-007": {
     "status": "applied",
     "appliedAt": "2026-10-21T20:15:46+05:30"

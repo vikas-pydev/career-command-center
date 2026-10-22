@@ -156,6 +156,14 @@ export interface RunHistoryRecord {
   nextScheduledRun: string;
 }
 
+export interface DailySummaryRecord {
+  runDate: string;
+  jobsDiscovered: string;
+  jobsVerified: string;
+  duplicatesExcluded: string;
+  eligibleJobs: string;
+}
+
 export interface OverviewStats {
   agentStatus: 'IDLE' | 'RUNNING' | 'QUEUED' | 'ERROR';
   currentRunId: string | null;

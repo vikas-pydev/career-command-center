@@ -14,6 +14,7 @@ import type {
   ActionItem,
   AgentEvent,
   CandidateProfile,
+  DailySummaryRecord,
   IntegrationStatus,
   JobRecord,
   OutreachRecord,
@@ -27,6 +28,7 @@ const STORAGE_KEY = 'career_command_job_user_states';
 
 interface StoredUserState {
   status: 'active' | 'applied' | 'deleted';
+  company?: string;
   appliedAt?: string;
   deletedAt?: string;
 }
@@ -34,17 +36,33 @@ interface StoredUserState {
 const getStoredJobStates = (): Record<string, StoredUserState> => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed: Record<string, StoredUserState> = JSON.parse(raw);
+      // Clean legacy collision keys that do not have company
+      if (parsed['JOB-2026-021'] && (!parsed['JOB-2026-021'].company || parsed['JOB-2026-021'].company.toLowerCase().includes('sarvam'))) {
+        delete parsed['JOB-2026-021'];
+      }
+      if (parsed['JOB-2026-022'] && (!parsed['JOB-2026-022'].company || parsed['JOB-2026-022'].company.toLowerCase().includes('fractal'))) {
+        delete parsed['JOB-2026-022'];
+      }
+      return parsed;
+    }
   } catch (e) {
     console.error('Failed to read job states from localStorage:', e);
   }
   return {};
 };
 
-const saveStoredJobState = (jobId: string, status: 'active' | 'applied' | 'deleted', appliedAt?: string, deletedAt?: string) => {
+const saveStoredJobState = (
+  jobId: string,
+  status: 'active' | 'applied' | 'deleted',
+  company?: string,
+  appliedAt?: string,
+  deletedAt?: string
+) => {
   try {
     const existing = getStoredJobStates();
-    existing[jobId] = { status, appliedAt, deletedAt };
+    existing[jobId] = { status, company, appliedAt, deletedAt };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
   } catch (e) {
     console.error('Failed to save job states to localStorage:', e);
@@ -67,6 +85,7 @@ export const App: React.FC = () => {
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
   const [tailoredResumes, setTailoredResumes] = useState<TailoredResumeV2[]>([]);
   const [runs, setRuns] = useState<RunHistoryRecord[]>([]);
+  const [dailySummary, setDailySummary] = useState<DailySummaryRecord[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus | null>(null);
 
@@ -136,13 +155,16 @@ export const App: React.FC = () => {
         // Merge stored states from localStorage to ensure applied/deleted decisions never revert on hard refresh
         const mergedJobs = rawJobs.map((j) => {
           const localState = storedStates[j.jobId];
+          const matchesCompany = !localState?.company || localState.company.toLowerCase() === j.company.toLowerCase();
+          const validLocalState = matchesCompany ? localState : undefined;
+
           const effectiveStatus: 'active' | 'applied' | 'deleted' =
-            localState?.status ||
+            validLocalState?.status ||
             (j.userStatus as any) ||
             (j.applicationStatus?.toLowerCase() === 'applied' ? 'applied' : 'active');
 
-          const appliedAt = localState?.appliedAt || j.appliedAt || (effectiveStatus === 'applied' ? (j.dateApplied || new Date().toISOString()) : undefined);
-          const deletedAt = localState?.deletedAt || j.deletedAt;
+          const appliedAt = validLocalState?.appliedAt || j.appliedAt || (effectiveStatus === 'applied' ? (j.dateApplied || new Date().toISOString()) : undefined);
+          const deletedAt = validLocalState?.deletedAt || j.deletedAt;
 
           return {
             ...j,
@@ -156,9 +178,9 @@ export const App: React.FC = () => {
         // Two-way sync: write back any server-persisted applied states into localStorage
         mergedJobs.forEach((mj) => {
           if (mj.userStatus === 'applied' && !storedStates[mj.jobId]) {
-            saveStoredJobState(mj.jobId, 'applied', mj.appliedAt);
+            saveStoredJobState(mj.jobId, 'applied', mj.company, mj.appliedAt);
           } else if (mj.userStatus === 'deleted' && !storedStates[mj.jobId]) {
-            saveStoredJobState(mj.jobId, 'deleted', undefined, mj.deletedAt);
+            saveStoredJobState(mj.jobId, 'deleted', mj.company, undefined, mj.deletedAt);
           }
         });
 
@@ -198,6 +220,13 @@ export const App: React.FC = () => {
       if (statusRes.ok) {
         const data = await statusRes.json();
         setIntegrationStatus(data.status);
+      }
+
+      // 8. Daily Summary (Tab 4)
+      const dailyRes = await fetch('/api/daily-summary', { headers });
+      if (dailyRes.ok) {
+        const data = await dailyRes.json();
+        setDailySummary(data.dailySummary || []);
       }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
@@ -289,8 +318,9 @@ export const App: React.FC = () => {
     const appliedAt = status === 'applied' ? nowIso : undefined;
     const deletedAt = status === 'deleted' ? nowIso : undefined;
 
+    const targetJob = jobs.find((j) => j.jobId === jobId);
     // 1. Immediately and synchronously persist to localStorage so decisions survive hard refresh
-    saveStoredJobState(jobId, status, appliedAt, deletedAt);
+    saveStoredJobState(jobId, status, targetJob?.company, appliedAt, deletedAt);
 
     // 2. Optimistic UI update across all components simultaneously
     setJobs((prevJobs) =>
@@ -450,7 +480,7 @@ export const App: React.FC = () => {
           )}
 
           {currentTab === 'runs' && (
-            <RunHistoryView runs={runs} allEvents={events} />
+            <RunHistoryView runs={runs} allEvents={events} dailySummary={dailySummary} />
           )}
 
           {currentTab === 'settings' && (

@@ -7,15 +7,17 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
+  Calendar,
 } from 'lucide-react';
-import type { AgentEvent, RunHistoryRecord } from '../types';
+import type { AgentEvent, RunHistoryRecord, DailySummaryRecord } from '../types';
 
 interface RunHistoryViewProps {
   runs: RunHistoryRecord[];
   allEvents: AgentEvent[];
+  dailySummary?: DailySummaryRecord[];
 }
 
-export const RunHistoryView: React.FC<RunHistoryViewProps> = ({ runs, allEvents }) => {
+export const RunHistoryView: React.FC<RunHistoryViewProps> = ({ runs, allEvents, dailySummary = [] }) => {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(runs[0]?.runId || null);
   const [expandedMobileRun, setExpandedMobileRun] = useState<string | null>(runs[0]?.runId || null);
 
@@ -205,6 +207,46 @@ export const RunHistoryView: React.FC<RunHistoryViewProps> = ({ runs, allEvents 
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: Daily Discovery Summary */}
+      {dailySummary && dailySummary.length > 0 && (
+        <div className="section-card" style={{ marginTop: '20px' }}>
+          <div className="section-header">
+            <div className="section-title">
+              <Calendar size={18} color="var(--accent-orange)" />
+              <span>Daily Discovery Cycle Summary (Master Tracker Tab 4)</span>
+            </div>
+            <span className="badge badge-live">Live Synced from Google Sheets</span>
+          </div>
+
+          <div className="data-table-wrapper data-table-desktop">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Discovery Cycle / Run Date</th>
+                  <th>Jobs Scanned / Discovered</th>
+                  <th>Verified Active</th>
+                  <th>Duplicates Deduplicated</th>
+                  <th>Eligible Added to Pipeline</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailySummary.map((d, idx) => (
+                  <tr key={idx}>
+                    <td style={{ fontWeight: 600 }}>{d.runDate}</td>
+                    <td>{d.jobsDiscovered}</td>
+                    <td>
+                      <span className="badge badge-live">{d.jobsVerified}</span>
+                    </td>
+                    <td>{d.duplicatesExcluded}</td>
+                    <td style={{ fontWeight: 700, color: 'var(--accent-orange)' }}>{d.eligibleJobs}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

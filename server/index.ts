@@ -227,6 +227,19 @@ app.get('/api/runs', requireAuth, (_req: Request, res: Response) => {
   }
 });
 
+// Daily Summary (Tab 4)
+app.get('/api/daily-summary', requireAuth, (_req: Request, res: Response) => {
+  try {
+    const dailySummary = trackerService.getDailySummary();
+    res.json({
+      total: dailySummary.length,
+      dailySummary,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch daily summary', details: err.message });
+  }
+});
+
 app.get('/api/runs/:runId/events', requireAuth, (req: Request, res: Response) => {
   const events = telemetryStore.getEventsByRunId(req.params.runId);
   res.json({
