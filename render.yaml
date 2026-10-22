@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: career-command-center
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build:client
+    startCommand: npm run server
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: GOOGLE_SPREADSHEET_ID
+        value: 1NnQzoTppnqQQxO7o6Bzo6CZN-kajKLIHhvVFgi7XP6g
+      - key: DASHBOARD_USER
+        value: vikastirumanyam@gmail.com
+      - key: DASHBOARD_PASSWORD
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SCHEDULER_CRON
+        value: "0 9 * * 1-5"
+      - key: SCHEDULER_TIMEZONE
+        value: Asia/Kolkata
+      - key: SCHEDULER_JOB_CAP
+        value: "25"
+      - key: AUTO_SEND_ENABLED
+        value: "false"
